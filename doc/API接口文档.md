@@ -2,7 +2,7 @@
 
 ## 1. 文档范围
 
-本文定义 NumCounts 正式 FastAPI 服务的 REST API。接口覆盖计算记录、函数元数据、执行、局部重载、重试和健康检查。所有计算都由服务端受控函数或已登记的外部执行器完成；客户端不能提交可执行 Python、JavaScript、SQL 或任意 URL。
+本文定义 NumCounts 正式 FastAPI 服务的 REST API。接口覆盖计算记录、函数元数据、规则插件、顺序工作流、执行、局部重载、重试和健康检查。所有计算都由服务端受控函数、已登记外部执行器或冻结的插件引用完成；客户端不能提交可执行 Python、JavaScript、SQL 或任意 URL。
 
 当前 Python 与 SQLite 原型保留为语义基线；本文描述已经落地的 FastAPI 与 MySQL 服务。未标记为“后续”的接口均可用。
 
@@ -97,7 +97,7 @@
 
 | 字段 | 要求 |
 |---|---|
-| `kind` | `registered` 或 `external` |
+| `kind` | `registered`、`external` 或 `plugin` |
 | `name` | 已登记函数名称，或外部执行器提供的函数名称 |
 | `version` | 已登记函数版本，或外部执行器兼容的函数版本 |
 
@@ -113,6 +113,17 @@
 ```
 
 记录不得包含外部服务地址、认证令牌或源码。服务端仅从 `EXTERNAL_EXECUTORS` 部署配置中解析 `executor_id`。
+
+已启用的规则插件可作为操作员友好的函数引用：
+
+```json
+{
+  "kind": "plugin",
+  "plugin_id": "11111111-1111-1111-1111-111111111111"
+}
+```
+
+创建时服务端冻结插件的版本、默认输入和最终函数引用；记录响应的 `plugin` 字段返回该快照。停用插件后不能创建新引用，但已创建记录仍按快照执行。
 
 ### 3.2 CalculationRecord
 
@@ -456,3 +467,53 @@ M1 的实际角色仅为 `ADMIN` 与 `USER`。下面的绩效管理员、学院�
 - `Function.version` 与 API 版本无关；函数版本独立冻结。
 - 接口废弃至少提前一个发布周期标记，并在 OpenAPI 描述和发布说明中注明替代接口。
 - FastAPI 自动生成的 `/docs` 仅在受控环境开放；生产环境应要求管理员认证或关闭公开访问。
+
+## 11. 规则插件与工作流
+
+本阶段接口面向当前 `ADMIN` 角色。插件与工作流均是声明式 JSON 配置，不接受可执行源码。
+
+### 11.1 规则插件
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/rule-plugins` | 创建默认停用的插件版本 |
+| `GET` | `/rule-plugins` | 按可选 `status` 查询插件目录 |
+| `GET` | `/rule-plugins/{plugin_id}` | 查询单个插件版本 |
+| `POST` | `/rule-plugins/{plugin_id}/enable` | 启用以供新记录或工作流引用 |
+| `POST` | `/rule-plugins/{plugin_id}/disable` | 停用新引用，不影响历史快照 |
+
+创建插件示例：
+
+```json
+{
+  "plugin_key": "teaching_hourly",
+  "version": "1.0.0",
+  "name": "教学课时绩效",
+  "description": "使用固定单价和质量系数",
+  "function": {
+    "kind": "registered",
+    "name": "teaching_performance",
+    "version": "1.0.0"
+  },
+  "input_defaults": {"rate": 80, "quality_factor": 1.1}
+}
+```
+
+同一 `plugin_key + version` 返回 `409 RULE_PLUGIN_VERSION_EXISTS`；未知函数或执行器返回对应 `404`；停用插件被新记录引用时返回 `409 RULE_PLUGIN_DISABLED`。
+
+### 11.2 工作流定义与运行
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/workflows` | 创建草稿工作流及冻结节点插件快照 |
+| `GET` | `/workflows` | 按可选 `status` 查询工作流 |
+| `GET` | `/workflows/{workflow_id}` | 查询定义和有序节点 |
+| `POST` | `/workflows/{workflow_id}/activate` | 激活工作流 |
+| `POST` | `/workflows/{workflow_id}/disable` | 禁止发起新运行 |
+| `POST` | `/workflows/{workflow_id}/runs` | 使用上下文同步运行工作流 |
+| `GET` | `/workflows/{workflow_id}/runs` | 查询运行历史 |
+| `GET` | `/workflow-runs/{workflow_run_id}` | 查询一次运行和全部节点详情 |
+
+工作流目前支持 `plugin` 节点和 `aggregate` 节点。插件节点的输入只能从顶层运行上下文读取或写入 JSON 字面量；聚合节点只能读取前序成功节点的 `output.amount`。一次运行失败时，失败节点保存结构化错误，余下节点为 `skipped`，HTTP 请求仍返回 `201` 与该次运行详情。
+
+完整节点配置、运行状态与验收样例见 [规则插件与工作流设计.md](规则插件与工作流设计.md)。

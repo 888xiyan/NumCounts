@@ -1,0 +1,33 @@
+:root { font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; color: #1c2737; background: #f3f6fa; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.shell { max-width: 1240px; margin: 0 auto; padding: 42px 24px 72px; }
+header, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+header { margin-bottom: 28px; }
+h1, h2, p { margin-top: 0; }
+h1 { margin-bottom: 8px; font-size: clamp(1.8rem, 4vw, 2.7rem); }
+h2 { margin-bottom: 12px; font-size: 1.15rem; }
+.eyebrow { color: #3469b8; font-size: .78rem; font-weight: 800; letter-spacing: .1em; }
+.subtitle, .card > p { color: #5f6e80; line-height: 1.6; }
+.card { background: #fff; border: 1px solid #dce5f0; box-shadow: 0 8px 28px rgba(23, 47, 78, .06); border-radius: 14px; padding: 24px; }
+.narrow { max-width: 460px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.run-card { margin-top: 20px; }
+label { display: grid; gap: 7px; margin: 13px 0; color: #40536b; font-size: .92rem; font-weight: 650; }
+input, textarea { width: 100%; border: 1px solid #c6d3e2; border-radius: 8px; padding: 10px 11px; color: #172334; font: inherit; background: #fbfdff; }
+textarea { font-family: "SFMono-Regular", Consolas, monospace; font-size: .82rem; line-height: 1.5; resize: vertical; }
+button { border: 0; border-radius: 8px; padding: 10px 14px; color: #fff; background: #2367c9; cursor: pointer; font: inherit; font-weight: 700; }
+button:hover { background: #1957ad; }
+button.ghost { color: #2367c9; background: #edf4ff; }
+button.ghost:hover { background: #ddeaff; }
+.records { display: grid; gap: 10px; margin-top: 18px; }
+.record { border-left: 3px solid #79a9ea; background: #f7faff; padding: 11px; border-radius: 5px; font-size: .88rem; }
+.record strong, .record code { display: block; }
+.record code { margin: 6px 0; word-break: break-all; color: #53657c; }
+.record .actions { display: flex; gap: 8px; margin-top: 8px; }
+.record .actions button { padding: 6px 9px; font-size: .8rem; }
+.run-fields { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+#notice { min-height: 24px; margin: 0 0 14px; color: #22663a; font-weight: 650; }
+#notice.error { color: #a12d32; }
+pre { overflow: auto; padding: 16px; border-radius: 8px; background: #162337; color: #d9e8ff; line-height: 1.5; }
+@media (max-width: 800px) { .grid, .run-fields { grid-template-columns: 1fr; } .shell { padding: 28px 15px; } header { align-items: flex-start; } }

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NumCounts 操作台</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <div>
+          <p class="eyebrow">NUMCOUNTS · 阶段三</p>
+          <h1>规则插件与工作流操作台</h1>
+          <p class="subtitle">配置规则、编排计算、查看每一步的可追溯结果。</p>
+        </div>
+        <button id="logout" class="ghost" hidden>退出登录</button>
+      </header>
+      <section id="login-card" class="card narrow">
+        <h2>管理员登录</h2>
+        <label>服务地址 <input id="api-base" value="http://127.0.0.1:8000/api/v1" /></label>
+        <label>用户名 <input id="username" value="admin" autocomplete="username" /></label>
+        <label>密码 <input id="password" type="password" autocomplete="current-password" /></label>
+        <button id="login">登录操作台</button>
+      </section>
+      <section id="console" hidden>
+        <div id="notice" role="status"></div>
+        <div class="grid">
+          <section class="card">
+            <div class="section-heading"><h2>规则插件</h2><button id="refresh-plugins" class="ghost">刷新</button></div>
+            <p>插件封装已登记函数与默认输入。创建后需启用，才能供新记录或工作流使用。</p>
+            <label>插件定义 JSON<textarea id="plugin-json" rows="12">{
+  "plugin_key": "teaching_hourly",
+  "version": "1.0.0",
+  "name": "教学课时绩效",
+  "description": "使用固定单价和质量系数",
+  "function": {"kind": "registered", "name": "teaching_performance", "version": "1.0.0"},
+  "input_defaults": {"rate": 80, "quality_factor": 1.1}
+}</textarea></label>
+            <button id="create-plugin">创建插件版本</button>
+            <div id="plugins" class="records"></div>
+          </section>
+          <section class="card">
+            <div class="section-heading"><h2>工作流</h2><button id="refresh-workflows" class="ghost">刷新</button></div>
+            <p>先填入已启用插件的 ID。聚合节点只能引用前面的节点。</p>
+            <label>工作流定义 JSON<textarea id="workflow-json" rows="17">{
+  "workflow_key": "annual_teaching",
+  "version": "1.0.0",
+  "name": "年度教学绩效",
+  "description": "从核定课时计算并汇总",
+  "nodes": [
+    {"node_key": "teaching", "node_type": "plugin", "config": {"plugin_id": "替换为插件 ID", "table_name": "teaching_results", "input_bindings": {"hours": {"kind": "context", "key": "approved_hours"}}}},
+    {"node_key": "total", "node_type": "aggregate", "config": {"table_name": "performance_summary", "source_node_keys": ["teaching"]}}
+  ]
+}</textarea></label>
+            <button id="create-workflow">创建工作流草稿</button>
+            <div id="workflows" class="records"></div>
+          </section>
+        </div>
+        <section class="card run-card">
+          <h2>发起工作流</h2>
+          <p>工作流必须先启用。运行结果会显示每个节点关联的底层计算记录。</p>
+          <div class="run-fields">
+            <label>工作流 ID <input id="run-workflow-id" placeholder="从上方复制工作流 ID" /></label>
+            <label>考核周期 <input id="run-period" value="2026-annual" /></label>
+          </div>
+          <label>运行上下文 JSON<textarea id="run-context" rows="4">{"approved_hours": 36}</textarea></label>
+          <button id="run-workflow">执行工作流</button>
+          <pre id="run-result" hidden></pre>
+        </section>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
