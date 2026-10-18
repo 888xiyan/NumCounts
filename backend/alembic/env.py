@@ -6,7 +6,9 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 import app.models.achievement  # noqa: F401
+import app.models.audit  # noqa: F401
 import app.models.calculation  # noqa: F401
+import app.models.link  # noqa: F401
 import app.models.plugin  # noqa: F401
 import app.models.user  # noqa: F401
 import app.models.workflow  # noqa: F401

@@ -68,6 +68,7 @@ def _attempt_response(attempt: CalculationAttempt) -> CalculationAttemptResponse
         function_snapshot=attempt.function_snapshot,
         output_snapshot=attempt.output_snapshot,
         error_snapshot=attempt.error_snapshot,
+        link_snapshot=attempt.link_snapshot,
         started_at=attempt.started_at,
         finished_at=attempt.finished_at,
         duration_ms=attempt.duration_ms,
@@ -97,7 +98,9 @@ async def create_calculation_record(
 async def list_calculation_records(
     table_name: str | None = Query(default=None, pattern=r"^[a-z][a-z0-9_]{0,63}$"),
     status_filter: str | None = Query(
-        default=None, alias="status", pattern=r"^(pending|running|success|failed)$"
+        default=None,
+        alias="status",
+        pattern=r"^(pending|waiting|running|success|failed|stale)$",
     ),
     period_id: str | None = Query(default=None, max_length=64),
     function_name: str | None = Query(default=None, max_length=128),

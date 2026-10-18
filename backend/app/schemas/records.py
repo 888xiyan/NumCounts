@@ -61,7 +61,7 @@ class CalculationRecordResponse(BaseModel):
     function: FunctionSpec
     plugin: dict[str, Any] | None = None
     output: dict[str, Any] | None
-    status: Literal["pending", "running", "success", "failed"]
+    status: Literal["pending", "waiting", "running", "success", "failed", "stale"]
     error: CalculationErrorResponse | None
     attempt_count: int
     version: int
@@ -84,6 +84,7 @@ class CalculationAttemptResponse(BaseModel):
     function_snapshot: dict[str, Any]
     output_snapshot: dict[str, Any] | None
     error_snapshot: dict[str, Any] | None
+    link_snapshot: list[dict[str, Any]] | None
     started_at: datetime
     finished_at: datetime | None
     duration_ms: int | None

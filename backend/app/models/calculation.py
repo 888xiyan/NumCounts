@@ -63,6 +63,9 @@ class CalculationAttempt(Base):
     function_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     output_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    link_snapshot: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True
+    )
     started_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)

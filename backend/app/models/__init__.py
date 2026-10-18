@@ -4,7 +4,9 @@ from app.models.achievement import (
     AchievementStatus,
     AchievementType,
 )
+from app.models.audit import AuditEvent
 from app.models.calculation import CalculationAttempt, CalculationRecord
+from app.models.link import RecordLink, RecordLinkType
 from app.models.plugin import RulePlugin, RulePluginStatus
 from app.models.user import User, UserRole
 from app.models.workflow import (
@@ -22,10 +24,13 @@ __all__ = [
     "AchievementSource",
     "AchievementStatus",
     "AchievementType",
+    "AuditEvent",
     "CalculationAttempt",
     "CalculationRecord",
     "RulePlugin",
     "RulePluginStatus",
+    "RecordLink",
+    "RecordLinkType",
     "User",
     "UserRole",
     "WorkflowDefinition",

@@ -5,13 +5,17 @@ import logging
 
 from app.core.config import settings
 from app.db.session import async_session_factory
-from app.services.calculation_service import run_pending
+from app.services.calculation_service import recover_interrupted_records, run_pending
 
 logger = logging.getLogger(__name__)
 
 
 async def run() -> None:
     """Poll pending records in FIFO order; the service serializes executions."""
+    async with async_session_factory() as session:
+        recovered = await recover_interrupted_records(session)
+    if recovered:
+        logger.warning("recovered %s interrupted calculation records", len(recovered))
     while True:
         async with async_session_factory() as session:
             records, skipped = await run_pending(

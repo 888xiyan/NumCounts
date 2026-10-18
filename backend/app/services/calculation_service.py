@@ -25,10 +25,14 @@ from app.schemas.records import (
     PluginFunctionSpec,
     RegisteredFunctionSpec,
 )
+from app.services.link_service import (
+    invalidate_downstream_records,
+    resolve_linked_input,
+)
 from app.services.plugin_service import resolve_enabled_plugin_snapshot
 
 _MAX_JSON_BYTES = 64 * 1024
-_EXECUTABLE_STATUSES = {"pending", "success", "failed"}
+_EXECUTABLE_STATUSES = {"pending", "waiting", "success", "failed"}
 _execution_lock = asyncio.Lock()
 
 
@@ -313,7 +317,7 @@ async def list_attempts(
 
 async def _start_execution(
     session: AsyncSession, *, record_id: str
-) -> tuple[CalculationRecord, str]:
+) -> tuple[CalculationRecord, str | None, dict[str, Any] | None]:
     result = await session.execute(
         select(CalculationRecord)
         .where(CalculationRecord.id == record_id)
@@ -341,6 +345,26 @@ async def _start_execution(
             details={"status": record.status},
         )
 
+    try:
+        link_resolution = await resolve_linked_input(session, record=record)
+    except FunctionExecutionError as error:
+        record.status = "failed"
+        record.error_code = error.code
+        record.error_message = error.message
+        record.error_details = error.details or None
+        record.lock_version += 1
+        record.updated_at = _now()
+        await session.commit()
+        await session.refresh(record)
+        return record, None, None
+    if link_resolution.waiting:
+        record.status = "waiting"
+        record.updated_at = _now()
+        record.lock_version += 1
+        await session.commit()
+        await session.refresh(record)
+        return record, None, None
+
     effective_function = _effective_function_spec(record)
     now = _now()
     execution_id = str(uuid.uuid4())
@@ -363,13 +387,14 @@ async def _start_execution(
                 else "external_http"
             ),
             status="running",
-            input_snapshot=record.input_data,
+            input_snapshot=link_resolution.input_data,
             function_snapshot=_attempt_function_snapshot(record, effective_function),
+            link_snapshot=link_resolution.snapshots or None,
             started_at=now,
         )
     )
     await session.commit()
-    return record, execution_id
+    return record, execution_id, link_resolution.input_data
 
 
 async def _finish_execution(
@@ -406,6 +431,7 @@ async def _finish_execution(
         record.output_data = output
         attempt.status = "success"
         attempt.output_snapshot = output
+        await invalidate_downstream_records(session, target_record_id=record.id)
     else:
         error_snapshot = {
             "code": error.code,
@@ -426,14 +452,18 @@ async def _finish_execution(
 async def _execute_record(
     session: AsyncSession, *, record_id: str
 ) -> CalculationRecord:
-    record, execution_id = await _start_execution(session, record_id=record_id)
+    record, execution_id, execution_input = await _start_execution(
+        session, record_id=record_id
+    )
+    if execution_id is None or execution_input is None:
+        return record
     started_monotonic = time.monotonic()
     output: dict[str, Any] | None = None
     execution_error: FunctionExecutionError | None = None
     try:
         effective_function = _effective_function_spec(record)
         if effective_function.get("kind") == "registered":
-            output = execute_registered_function(effective_function, record.input_data)
+            output = execute_registered_function(effective_function, execution_input)
         elif effective_function.get("kind") == "external":
             executor_id = effective_function.get("executor_id")
             name = effective_function.get("name")
@@ -449,7 +479,7 @@ async def _execute_record(
                 record_id=record.id,
                 table_name=record.table_name,
                 function={"name": name, "version": version},
-                input_data=record.input_data,
+                input_data=execution_input,
             )
         else:
             raise FunctionExecutionError(
@@ -505,6 +535,7 @@ async def _reload_record(session: AsyncSession, *, record_id: str) -> Calculatio
     record.error_details = None
     record.lock_version += 1
     record.updated_at = _now()
+    await invalidate_downstream_records(session, target_record_id=record.id)
     await session.commit()
     await session.refresh(record)
     return record
@@ -528,7 +559,7 @@ async def run_pending(
     """Run a bounded FIFO batch.  A running record skipped by a peer is harmless."""
     statement = (
         select(CalculationRecord.id)
-        .where(CalculationRecord.status == "pending")
+        .where(CalculationRecord.status.in_(("pending", "waiting")))
         .order_by(CalculationRecord.created_at, CalculationRecord.id)
         .limit(limit)
     )
@@ -544,3 +575,45 @@ async def run_pending(
                 continue
             raise
     return records, skipped
+
+
+async def recover_interrupted_records(
+    session: AsyncSession,
+) -> list[CalculationRecord]:
+    """Make records left running by a process crash explicitly retryable."""
+    result = await session.execute(
+        select(CalculationRecord)
+        .where(CalculationRecord.status == "running")
+        .with_for_update()
+    )
+    records = list(result.scalars().all())
+    if not records:
+        return []
+    now = _now()
+    for record in records:
+        record.status = "failed"
+        record.error_code = "EXECUTION_INTERRUPTED"
+        record.error_message = "execution was interrupted before completion"
+        record.error_details = {"recovery": "manual"}
+        record.lock_version += 1
+        record.updated_at = now
+        attempt = await session.scalar(
+            select(CalculationAttempt)
+            .where(
+                CalculationAttempt.record_id == record.id,
+                CalculationAttempt.status == "running",
+            )
+            .with_for_update()
+        )
+        if attempt is not None:
+            attempt.status = "failed"
+            attempt.error_snapshot = {
+                "code": "EXECUTION_INTERRUPTED",
+                "message": "execution was interrupted before completion",
+            }
+            attempt.finished_at = now
+            attempt.duration_ms = None
+    await session.commit()
+    for record in records:
+        await session.refresh(record)
+    return records

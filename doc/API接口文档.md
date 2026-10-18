@@ -517,3 +517,20 @@ M1 的实际角色仅为 `ADMIN` 与 `USER`。下面的绩效管理员、学院�
 工作流目前支持 `plugin` 节点和 `aggregate` 节点。插件节点的输入只能从顶层运行上下文读取或写入 JSON 字面量；聚合节点只能读取前序成功节点的 `output.amount`。一次运行失败时，失败节点保存结构化错误，余下节点为 `skipped`，HTTP 请求仍返回 `201` 与该次运行详情。
 
 完整节点配置、运行状态与验收样例见 [规则插件与工作流设计.md](规则插件与工作流设计.md)。
+
+## 12. 跨表链接与运行治理
+
+记录链接使用受控 JSON 路径把目标记录值注入源记录的一次执行输入。`data` 链接读取已有数据；`execution` 链接等待目标记录成功。路径只允许 `input` 或 `output` 的对象字段，例如 `output.amount`。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/record-links` | 创建 `data` 或 `execution` 链接并拒绝循环 |
+| `GET` | `/record-links?source_record_id={id}` | 查询源记录链接 |
+| `DELETE` | `/record-links/{id}` | 删除链接 |
+| `GET` | `/runtime/summary` | 查询状态、积压、链接与运行尝试指标 |
+| `POST` | `/runtime/recover-interrupted` | 恢复遗留 `running` 记录 |
+| `GET` | `/audit-events` | 查询链接与恢复审计事件 |
+
+`execution` 目标未成功时，源记录响应为 `waiting`；目标失败时，源记录为 `failed` 并含 `RECORD_LINK_DEPENDENCY_FAILED`。目标重载或重新成功执行会使下游记录成为 `stale`，保留旧输出且不会自动重跑。每次实际执行尝试新增可选 `link_snapshot`，保存目标记录 ID、版本、路径和取值。
+
+本阶段接口沿用现有 `ADMIN` 角色；身份、细粒度权限和组织范围控制已挂起。完整语义见 [跨表链接与运行治理设计.md](跨表链接与运行治理设计.md)。

@@ -16,7 +16,9 @@ FastAPI 服务的对外接口规范见 [API接口文档.md](API接口文档.md)�
 
 规则插件、工作流节点、运行状态与操作接口见 [规则插件与工作流设计.md](规则插件与工作流设计.md)。
 
-这是基于 Python 标准库和 SQLite 的最小可运行实现。每条记录均持久化以下核心字段：
+跨表链接、依赖等待、下游失效、恢复、审计与运行指标见 [跨表链接与运行治理设计.md](跨表链接与运行治理设计.md)。
+
+下文保留的是基于 Python 标准库和 SQLite 的最小原型说明；正式内核以 FastAPI 和 MySQL 为准。每条记录均持久化以下核心字段：
 
 | 字段 | 存储方式 | 作用 |
 |---|---|---|
@@ -70,4 +72,4 @@ python3 -m unittest -v
 
 `PerformanceKernel.run_pending()` 按创建时间顺序读取所有 `pending` 记录，并在单线程中逐条执行。每条记录会经历 `pending → running → success/failed` 状态变化；无效输入会写入错误信息，而不会中断其他待执行记录。
 
-当前只支持局部重载：`reload_record(record_id)` 仅清除指定记录的输出和错误，并将其放回 `pending`。`retry_record(record_id)` 会在局部重载后立即重试该记录。插队、批量重载、跨表依赖传播暂未实现。
+原型只支持局部重载：`reload_record(record_id)` 仅清除指定记录的输出和错误，并将其放回 `pending`。`retry_record(record_id)` 会在局部重载后立即重试该记录。正式内核已经实现受控跨表链接、依赖等待与下游失效传播；插队和批量重载仍未实现。
