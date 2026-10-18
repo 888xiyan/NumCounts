@@ -60,6 +60,8 @@ class CalculationRecordResponse(BaseModel):
     input: dict[str, Any]
     function: FunctionSpec
     plugin: dict[str, Any] | None = None
+    requested_by_user_id: str | None
+    workflow_run_id: str | None
     output: dict[str, Any] | None
     status: Literal["pending", "waiting", "running", "success", "failed", "stale"]
     error: CalculationErrorResponse | None
@@ -82,6 +84,9 @@ class CalculationAttemptResponse(BaseModel):
     status: Literal["running", "success", "failed"]
     input_snapshot: dict[str, Any]
     function_snapshot: dict[str, Any]
+    function_body_snapshot: dict[str, Any] | None
+    function_body_snapshot_verified: bool | None
+    execution_context_snapshot: dict[str, Any] | None
     output_snapshot: dict[str, Any] | None
     error_snapshot: dict[str, Any] | None
     link_snapshot: list[dict[str, Any]] | None

@@ -1,8 +1,41 @@
+import hashlib
 from functools import lru_cache
+from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ExternalFunctionArtifact(BaseModel):
+    """An audited source bundle for one external function version.
+
+    The source is supplied only in deployment configuration, never by a
+    calculation record.  The digest makes configuration mistakes observable
+    before an external function can be used for a formal calculation.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=128)
+    version: str = Field(min_length=1, max_length=64)
+    language: Literal["python"] = "python"
+    source: str = Field(min_length=1, max_length=64 * 1024)
+    source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    dependencies: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def verify_source_digest(self) -> "ExternalFunctionArtifact":
+        actual_digest = hashlib.sha256(self.source.encode()).hexdigest()
+        if actual_digest != self.source_sha256:
+            raise ValueError("source_sha256 does not match source")
+        return self
 
 
 class ExternalExecutorSettings(BaseModel):
@@ -15,6 +48,7 @@ class ExternalExecutorSettings(BaseModel):
     execution_path: str = "/v1/executions"
     authorization_token: str | None = None
     timeout_ms: int = Field(default=5000, ge=100, le=60000)
+    function_artifacts: list[ExternalFunctionArtifact] = Field(default_factory=list)
 
     @field_validator("base_url")
     @classmethod

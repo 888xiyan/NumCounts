@@ -15,6 +15,7 @@ from app.core.errors import APIError
 from app.executors import execute_external_function, get_executor
 from app.functions import (
     FunctionExecutionError,
+    build_function_body_snapshot,
     execute_registered_function,
     get_registered_function,
 )
@@ -111,11 +112,26 @@ def _attempt_function_snapshot(
     }
 
 
+def _execution_context_snapshot(record: CalculationRecord) -> dict[str, Any]:
+    """Freeze the record-level formal-calculation context for one attempt."""
+    return {
+        "schema_version": "numcounts.execution-context.v1",
+        "record_id": record.id,
+        "table_name": record.table_name,
+        "period_id": record.period_id,
+        "requested_by_user_id": record.requested_by_user_id,
+        "workflow_run_id": record.workflow_run_id,
+        "plugin": record.plugin_snapshot,
+    }
+
+
 async def create_record(
     session: AsyncSession,
     *,
     request: CreateRecordRequest,
     idempotency_key: str,
+    requested_by_user_id: str | None = None,
+    workflow_run_id: str | None = None,
 ) -> tuple[CalculationRecord, bool]:
     """Create a pending record, or return the prior result for the same request."""
     input_data = request.input
@@ -178,6 +194,8 @@ async def create_record(
         function_spec=function_spec,
         plugin_id=(plugin_snapshot or {}).get("id"),
         plugin_snapshot=plugin_snapshot,
+        requested_by_user_id=requested_by_user_id,
+        workflow_run_id=workflow_run_id,
         status="pending",
         attempt_count=0,
         lock_version=1,
@@ -219,6 +237,8 @@ async def create_record_from_plugin_snapshot(
     period_id: str | None,
     input_data: dict[str, Any],
     plugin_snapshot: dict[str, Any],
+    requested_by_user_id: str | None = None,
+    workflow_run_id: str | None = None,
 ) -> CalculationRecord:
     """Create a workflow record from the plugin version frozen in its node.
 
@@ -253,6 +273,8 @@ async def create_record_from_plugin_snapshot(
         function_spec={"kind": "plugin", "plugin_id": plugin_id},
         plugin_id=plugin_id,
         plugin_snapshot=plugin_snapshot,
+        requested_by_user_id=requested_by_user_id,
+        workflow_run_id=workflow_run_id,
         status="pending",
         attempt_count=0,
         lock_version=1,
@@ -347,6 +369,8 @@ async def _start_execution(
 
     try:
         link_resolution = await resolve_linked_input(session, record=record)
+        effective_function = _effective_function_spec(record)
+        function_body_snapshot = build_function_body_snapshot(effective_function)
     except FunctionExecutionError as error:
         record.status = "failed"
         record.error_code = error.code
@@ -365,7 +389,6 @@ async def _start_execution(
         await session.refresh(record)
         return record, None, None
 
-    effective_function = _effective_function_spec(record)
     now = _now()
     execution_id = str(uuid.uuid4())
     record.status = "running"
@@ -389,6 +412,8 @@ async def _start_execution(
             status="running",
             input_snapshot=link_resolution.input_data,
             function_snapshot=_attempt_function_snapshot(record, effective_function),
+            function_body_snapshot=function_body_snapshot,
+            execution_context_snapshot=_execution_context_snapshot(record),
             link_snapshot=link_resolution.snapshots or None,
             started_at=now,
         )

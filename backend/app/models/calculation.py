@@ -16,6 +16,8 @@ class CalculationRecord(Base):
         Index("idx_records_status_created", "status", "created_at"),
         Index("idx_records_table_period", "table_name", "period_id"),
         Index("idx_records_status_period", "status", "period_id"),
+        Index("idx_records_requester_created", "requested_by_user_id", "created_at"),
+        Index("idx_records_workflow_run", "workflow_run_id"),
     )
 
     id: Mapped[str] = mapped_column(
@@ -30,6 +32,12 @@ class CalculationRecord(Base):
         String(36), ForeignKey("rule_plugins.id"), nullable=True
     )
     plugin_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    requested_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True
+    )
+    workflow_run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("workflow_runs.id"), nullable=True
+    )
     output_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -61,6 +69,12 @@ class CalculationAttempt(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     input_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     function_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    function_body_snapshot: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    execution_context_snapshot: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
     output_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     link_snapshot: Mapped[list[dict[str, Any]] | None] = mapped_column(

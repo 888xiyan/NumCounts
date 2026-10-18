@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_role
 from app.db.session import get_session
+from app.functions import verify_function_body_snapshot
 from app.models.calculation import CalculationAttempt, CalculationRecord
 from app.models.user import User, UserRole
 from app.schemas.records import (
@@ -46,6 +47,8 @@ def _record_response(record: CalculationRecord) -> CalculationRecordResponse:
         input=record.input_data,
         function=record.function_spec,
         plugin=record.plugin_snapshot,
+        requested_by_user_id=record.requested_by_user_id,
+        workflow_run_id=record.workflow_run_id,
         output=record.output_data,
         status=record.status,
         error=error,
@@ -66,6 +69,11 @@ def _attempt_response(attempt: CalculationAttempt) -> CalculationAttemptResponse
         status=attempt.status,
         input_snapshot=attempt.input_snapshot,
         function_snapshot=attempt.function_snapshot,
+        function_body_snapshot=attempt.function_body_snapshot,
+        function_body_snapshot_verified=verify_function_body_snapshot(
+            attempt.function_body_snapshot
+        ),
+        execution_context_snapshot=attempt.execution_context_snapshot,
         output_snapshot=attempt.output_snapshot,
         error_snapshot=attempt.error_snapshot,
         link_snapshot=attempt.link_snapshot,
@@ -83,12 +91,13 @@ async def create_calculation_record(
     response: Response,
     idempotency_key: UUID = Header(alias="Idempotency-Key"),
     session: AsyncSession = Depends(get_session),
-    _: User = Depends(require_role(UserRole.ADMIN)),
+    user: User = Depends(require_role(UserRole.ADMIN)),
 ) -> CalculationRecordResponse:
     record, created = await create_record(
         session,
         request=request,
         idempotency_key=str(idempotency_key),
+        requested_by_user_id=user.id,
     )
     response.status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
     return _record_response(record)

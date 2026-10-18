@@ -349,6 +349,8 @@ async def start_workflow_run(
                     period_id=request.period_id,
                     input_data=node_input,
                     plugin_snapshot=node.plugin_snapshot,
+                    requested_by_user_id=user.id,
+                    workflow_run_id=workflow_run.id,
                 )
             elif node.node_type == "aggregate":
                 config = AggregateWorkflowNodeConfig.model_validate(node.config)
@@ -366,6 +368,8 @@ async def start_workflow_run(
                         ),
                     ),
                     idempotency_key=str(uuid.uuid4()),
+                    requested_by_user_id=user.id,
+                    workflow_run_id=workflow_run.id,
                 )
             else:
                 raise APIError(

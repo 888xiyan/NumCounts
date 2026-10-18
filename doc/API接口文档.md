@@ -142,6 +142,8 @@
     "name": "teaching_performance",
     "version": "1.0.0"
   },
+  "requested_by_user_id": "11111111-1111-1111-1111-111111111111",
+  "workflow_run_id": null,
   "output": {
     "metric": "teaching_performance",
     "amount": 3168.0
@@ -154,7 +156,7 @@
 }
 ```
 
-`table_name` 只能包含小写字母、数字和下划线，长度不超过 64。`input` 必须是 JSON 对象，最大 64 KiB。`output`、`status`、`error` 和 `attempt_count` 均由计算核心维护。
+`table_name` 只能包含小写字母、数字和下划线，长度不超过 64。`input` 必须是 JSON 对象，最大 64 KiB。`output`、`status`、`error` 和 `attempt_count` 均由计算核心维护。`requested_by_user_id` 记录正式计算发起人；工作流创建的底层记录还会填充 `workflow_run_id`。
 
 ## 4. 计算记录 API
 
@@ -189,7 +191,7 @@ Idempotency-Key: 4a353e8e-3578-4dda-954d-5d5063d4509e
 }
 ```
 
-成功创建返回 `201 Created` 和状态为 `pending` 的完整记录。相同幂等键与相同请求体返回首次创建的记录和 `200 OK`；相同键与不同请求体返回 `409 IDEMPOTENCY_KEY_REUSED`。计算记录接口目前仅限 `ADMIN`。
+成功创建返回 `201 Created` 和状态为 `pending` 的完整记录。相同幂等键与相同请求体返回首次创建的记录和 `200 OK`；相同键与不同请求体返回 `409 IDEMPOTENCY_KEY_REUSED`。计算记录接口目前仅限 `ADMIN`，服务端会把当前管理员写入 `requested_by_user_id`。
 
 ### 4.2 查询单条记录
 
@@ -207,7 +209,7 @@ Idempotency-Key: 4a353e8e-3578-4dda-954d-5d5063d4509e
 |---|---|---|
 | `table_name` | string | 精确过滤逻辑表名 |
 | `period_id` | string | 精确过滤考核周期 |
-| `status` | string | `pending`、`running`、`success`、`failed` |
+| `status` | string | `pending`、`waiting`、`running`、`success`、`failed`、`stale` |
 | `function_name` | string | 精确过滤函数名称 |
 | `limit` | integer | 返回数量，默认 100，范围 1–100 |
 
@@ -233,7 +235,7 @@ Idempotency-Key: 4a353e8e-3578-4dda-954d-5d5063d4509e
 
 `POST /api/v1/records/{record_id}/execute`
 
-请求体为空对象 `{}`。服务端对该记录加互斥锁，创建一次执行尝试，增加 `attempt_count`，然后同步完成内置函数计算或受控外部执行器调用。
+请求体为空对象 `{}`。服务端对该记录加互斥锁，创建一次执行尝试，增加 `attempt_count`，保存函数引用、实际函数本体、摘要及执行上下文快照，然后同步完成内置函数计算或受控外部执行器调用。
 
 成功计算返回 `200 OK` 与 `status=success` 的记录。业务输入错误同样返回 `200 OK`，但记录状态为 `failed` 且包含 `error`，因为本次执行请求已被成功处理。请求状态或权限错误才返回 `4xx`。
 
@@ -249,7 +251,7 @@ Idempotency-Key: 4a353e8e-3578-4dda-954d-5d5063d4509e
 }
 ```
 
-服务端按 `created_at ASC, id ASC` 顺序执行最多 `limit` 条 `pending` 记录；MVP 的执行器只允许单个实例运行。
+服务端按 `created_at ASC, id ASC` 顺序执行最多 `limit` 条 `pending` 或 `waiting` 记录；MVP 的执行器只允许单个实例运行。
 
 响应：
 
@@ -267,7 +269,7 @@ Idempotency-Key: 4a353e8e-3578-4dda-954d-5d5063d4509e
 
 `POST /api/v1/records/{record_id}/reload`
 
-局部重载只影响路径中的一条记录：清空 `output` 和 `error`，并把状态改为 `pending`。它不增加 `attempt_count`，不重跑其他记录，不改变其他表，也不传播跨表状态。
+局部重载只影响目标记录：清空 `output` 和 `error`，并把状态改为 `pending`。它不增加 `attempt_count`，不自动重跑其他记录；若该记录被跨表链接引用，下游记录会标为 `stale`，保留原输出并等待显式重载或重试。
 
 若记录为 `running`，返回 `409 RECORD_RUNNING`。
 
@@ -276,6 +278,14 @@ Idempotency-Key: 4a353e8e-3578-4dda-954d-5d5063d4509e
 `POST /api/v1/records/{record_id}/retry`
 
 服务端依次执行局部重载和一次执行。返回新的完整记录。失败重试仍返回 `200 OK` 与 `status=failed`，错误详情位于 `error`，并且 `attempt_count` 增加一。
+
+### 4.8 查询执行尝试与函数快照
+
+`GET /api/v1/records/{record_id}/attempts`
+
+响应按尝试序号返回不可变历史。每项包含 `input_snapshot`、`function_snapshot`、`function_body_snapshot`、`execution_context_snapshot`、输出或错误快照，以及 `function_body_snapshot_verified`。
+
+`function_body_snapshot_verified=true` 表示保存内容的 `content_sha256` 校验通过；`false` 表示快照已损坏或被篡改；`null` 表示该尝试创建于 M4 前，只保存函数引用。受控注册函数的函数本体为实际 Python handler 与输入契约；外部函数必须在部署的 `EXTERNAL_EXECUTORS` 配置中拥有同版本 `function_artifacts`，否则执行记录为 `failed` 并包含 `FUNCTION_SNAPSHOT_UNAVAILABLE`。
 
 ## 5. 函数 API
 
@@ -458,7 +468,7 @@ M1 的实际角色仅为 `ADMIN` 与 `USER`。下面的绩效管理员、学院�
 | 重载与重试 | 是 | 是 | 本学院 | 否 |
 | 管理函数与执行器 | 是 | 否 | 否 | 否 |
 
-当前已保存不可变执行尝试快照；完整审计事件（操作者、对象、前后状态与请求 ID）属于后续治理能力。
+当前已保存不可变执行尝试及函数本体快照；链接创建／删除和中断恢复事件可通过 `/audit-events` 查询。完整的查看、导出、审核和申诉审计范围仍待后续业务规则确认。
 
 ## 10. 版本与兼容性
 
