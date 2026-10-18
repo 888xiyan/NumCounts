@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
@@ -18,6 +19,13 @@ def create_app() -> FastAPI:
         openapi_url=f"{settings.api_v1_prefix}/openapi.json",
         docs_url="/docs" if settings.app_env != "production" else None,
         redoc_url=None,
+    )
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     @application.middleware("http")
     async def add_request_id(

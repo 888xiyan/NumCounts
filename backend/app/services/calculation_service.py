@@ -19,7 +19,13 @@ from app.functions import (
     get_registered_function,
 )
 from app.models.calculation import CalculationAttempt, CalculationRecord
-from app.schemas.records import CreateRecordRequest, RegisteredFunctionSpec
+from app.schemas.records import (
+    CreateRecordRequest,
+    ExternalFunctionSpec,
+    PluginFunctionSpec,
+    RegisteredFunctionSpec,
+)
+from app.services.plugin_service import resolve_enabled_plugin_snapshot
 
 _MAX_JSON_BYTES = 64 * 1024
 _EXECUTABLE_STATUSES = {"pending", "success", "failed"}
@@ -42,14 +48,63 @@ def _ensure_json_size(value: dict[str, Any], *, field_name: str) -> None:
 
 
 def _record_matches_request(
-    record: CalculationRecord, request: CreateRecordRequest
+    record: CalculationRecord,
+    *,
+    table_name: str,
+    period_id: str | None,
+    input_data: dict[str, Any],
+    function_spec: dict[str, Any],
+    plugin_snapshot: dict[str, Any] | None,
 ) -> bool:
     return (
-        record.table_name == request.table_name
-        and record.period_id == request.period_id
-        and record.input_data == request.input
-        and record.function_spec == request.function.model_dump()
+        record.table_name == table_name
+        and record.period_id == period_id
+        and record.input_data == input_data
+        and record.function_spec == function_spec
+        and record.plugin_snapshot == plugin_snapshot
     )
+
+
+def _validate_executable_function(function_spec: dict[str, Any]) -> None:
+    try:
+        kind = function_spec.get("kind")
+        if kind == "registered":
+            get_registered_function(function_spec["name"], function_spec["version"])
+        elif kind == "external":
+            get_executor(function_spec["executor_id"])
+        else:
+            raise FunctionExecutionError(
+                "INVALID_FUNCTION_SPEC",
+                "function kind must be registered or external",
+            )
+    except (KeyError, TypeError) as error:
+        raise FunctionExecutionError(
+            "INVALID_FUNCTION_SPEC", "function reference is malformed"
+        ) from error
+
+
+def _effective_function_spec(record: CalculationRecord) -> dict[str, Any]:
+    if record.function_spec.get("kind") != "plugin":
+        return record.function_spec
+    snapshot = record.plugin_snapshot
+    if not isinstance(snapshot, dict) or not isinstance(snapshot.get("function"), dict):
+        raise FunctionExecutionError(
+            "INVALID_PLUGIN_SNAPSHOT",
+            "plugin calculation record has no executable function snapshot",
+        )
+    return snapshot["function"]
+
+
+def _attempt_function_snapshot(
+    record: CalculationRecord, effective_function: dict[str, Any]
+) -> dict[str, Any]:
+    if record.plugin_snapshot is None:
+        return effective_function
+    return {
+        "function": record.function_spec,
+        "resolved_function": effective_function,
+        "plugin": record.plugin_snapshot,
+    }
 
 
 async def create_record(
@@ -59,13 +114,23 @@ async def create_record(
     idempotency_key: str,
 ) -> tuple[CalculationRecord, bool]:
     """Create a pending record, or return the prior result for the same request."""
-    _ensure_json_size(request.input, field_name="input")
+    input_data = request.input
     function_spec = request.function.model_dump()
+    plugin_snapshot: dict[str, Any] | None = None
     try:
         if isinstance(request.function, RegisteredFunctionSpec):
             get_registered_function(request.function.name, request.function.version)
-        else:
+        elif isinstance(request.function, ExternalFunctionSpec):
             get_executor(request.function.executor_id)
+        elif isinstance(request.function, PluginFunctionSpec):
+            plugin_snapshot = await resolve_enabled_plugin_snapshot(
+                session, plugin_id=request.function.plugin_id
+            )
+            input_data = {**plugin_snapshot["input_defaults"], **request.input}
+        else:
+            raise FunctionExecutionError(
+                "INVALID_FUNCTION_SPEC", "unsupported function kind"
+            )
     except FunctionExecutionError as error:
         raise APIError(
             status_code=(
@@ -77,6 +142,7 @@ async def create_record(
             message=error.message,
             details=error.details,
         ) from error
+    _ensure_json_size(input_data, field_name="input")
 
     existing = await session.scalar(
         select(CalculationRecord).where(
@@ -84,7 +150,14 @@ async def create_record(
         )
     )
     if existing is not None:
-        if _record_matches_request(existing, request):
+        if _record_matches_request(
+            existing,
+            table_name=request.table_name,
+            period_id=request.period_id,
+            input_data=input_data,
+            function_spec=function_spec,
+            plugin_snapshot=plugin_snapshot,
+        ):
             return existing, False
         raise APIError(
             status_code=409,
@@ -97,8 +170,10 @@ async def create_record(
         table_name=request.table_name,
         period_id=request.period_id,
         idempotency_key=idempotency_key,
-        input_data=request.input,
+        input_data=input_data,
         function_spec=function_spec,
+        plugin_id=(plugin_snapshot or {}).get("id"),
+        plugin_snapshot=plugin_snapshot,
         status="pending",
         attempt_count=0,
         lock_version=1,
@@ -115,7 +190,14 @@ async def create_record(
                 CalculationRecord.idempotency_key == idempotency_key
             )
         )
-        if existing is not None and _record_matches_request(existing, request):
+        if existing is not None and _record_matches_request(
+            existing,
+            table_name=request.table_name,
+            period_id=request.period_id,
+            input_data=input_data,
+            function_spec=function_spec,
+            plugin_snapshot=plugin_snapshot,
+        ):
             return existing, False
         raise APIError(
             status_code=409,
@@ -124,6 +206,59 @@ async def create_record(
         ) from error
     await session.refresh(record)
     return record, True
+
+
+async def create_record_from_plugin_snapshot(
+    session: AsyncSession,
+    *,
+    table_name: str,
+    period_id: str | None,
+    input_data: dict[str, Any],
+    plugin_snapshot: dict[str, Any],
+) -> CalculationRecord:
+    """Create a workflow record from the plugin version frozen in its node.
+
+    Workflow definitions are immutable.  A later plugin disable therefore must
+    not make a historical workflow version ambiguous or silently switch it to a
+    different rule.  This trusted internal path never accepts a snapshot from
+    the public API.
+    """
+    _ensure_json_size(input_data, field_name="input")
+    plugin_id = plugin_snapshot.get("id")
+    effective_function = plugin_snapshot.get("function")
+    if not isinstance(plugin_id, str) or not isinstance(effective_function, dict):
+        raise APIError(
+            status_code=409,
+            code="INVALID_PLUGIN_SNAPSHOT",
+            message="workflow node has an invalid plugin snapshot",
+        )
+    try:
+        _validate_executable_function(effective_function)
+    except FunctionExecutionError as error:
+        raise APIError(
+            status_code=409,
+            code=error.code,
+            message=error.message,
+            details=error.details,
+        ) from error
+    now = _now()
+    record = CalculationRecord(
+        table_name=table_name,
+        period_id=period_id,
+        input_data=input_data,
+        function_spec={"kind": "plugin", "plugin_id": plugin_id},
+        plugin_id=plugin_id,
+        plugin_snapshot=plugin_snapshot,
+        status="pending",
+        attempt_count=0,
+        lock_version=1,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(record)
+    await session.commit()
+    await session.refresh(record)
+    return record
 
 
 async def get_record(session: AsyncSession, *, record_id: str) -> CalculationRecord:
@@ -206,6 +341,7 @@ async def _start_execution(
             details={"status": record.status},
         )
 
+    effective_function = _effective_function_spec(record)
     now = _now()
     execution_id = str(uuid.uuid4())
     record.status = "running"
@@ -223,12 +359,12 @@ async def _start_execution(
             execution_id=execution_id,
             executor_type=(
                 "python_registry"
-                if record.function_spec.get("kind") == "registered"
+                if effective_function.get("kind") == "registered"
                 else "external_http"
             ),
             status="running",
             input_snapshot=record.input_data,
-            function_snapshot=record.function_spec,
+            function_snapshot=_attempt_function_snapshot(record, effective_function),
             started_at=now,
         )
     )
@@ -295,14 +431,13 @@ async def _execute_record(
     output: dict[str, Any] | None = None
     execution_error: FunctionExecutionError | None = None
     try:
-        if record.function_spec.get("kind") == "registered":
-            output = execute_registered_function(
-                record.function_spec, record.input_data
-            )
-        elif record.function_spec.get("kind") == "external":
-            executor_id = record.function_spec.get("executor_id")
-            name = record.function_spec.get("name")
-            version = record.function_spec.get("version")
+        effective_function = _effective_function_spec(record)
+        if effective_function.get("kind") == "registered":
+            output = execute_registered_function(effective_function, record.input_data)
+        elif effective_function.get("kind") == "external":
+            executor_id = effective_function.get("executor_id")
+            name = effective_function.get("name")
+            version = effective_function.get("version")
             if not all(isinstance(item, str) for item in (executor_id, name, version)):
                 raise FunctionExecutionError(
                     "INVALID_FUNCTION_SPEC",

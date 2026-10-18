@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     runner_poll_interval_seconds: float = 1.0
     runner_batch_size: int = 100
     external_executors: list[ExternalExecutorSettings] = Field(default_factory=list)
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://127.0.0.1:4173",
+            "http://localhost:4173",
+            "http://127.0.0.1:3000",
+            "http://localhost:3000",
+        ]
+    )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -45,6 +45,7 @@ def _record_response(record: CalculationRecord) -> CalculationRecordResponse:
         period_id=record.period_id,
         input=record.input_data,
         function=record.function_spec,
+        plugin=record.plugin_snapshot,
         output=record.output_data,
         status=record.status,
         error=error,

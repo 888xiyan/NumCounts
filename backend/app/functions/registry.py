@@ -55,6 +55,12 @@ class _ResearchInput(BaseModel):
     funding_rate: float = Field(default=0.01, ge=0)
 
 
+class _AggregateAmountsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    amounts: list[float] = Field(min_length=1)
+
+
 def _teaching_performance(value: _TeachingInput) -> dict[str, Any]:
     amount = round(value.hours * value.rate * value.quality_factor, 2)
     return {
@@ -88,6 +94,14 @@ def _research_performance(value: _ResearchInput) -> dict[str, Any]:
         "formula": (
             "papers * paper_weight + projects * project_weight + funding * funding_rate"
         ),
+    }
+
+
+def _aggregate_amounts(value: _AggregateAmountsInput) -> dict[str, Any]:
+    return {
+        "metric": "aggregate_amounts",
+        "amount": round(sum(value.amounts), 2),
+        "formula": "sum(amounts)",
     }
 
 
@@ -156,6 +170,14 @@ _REGISTRY: dict[tuple[str, str], RegisteredFunction] = {
         _ResearchInput,
         _AMOUNT_OUTPUT_SCHEMA,
         _research_performance,
+    ),
+    ("aggregate_amounts", "1.0.0"): RegisteredFunction(
+        "aggregate_amounts",
+        "1.0.0",
+        "Aggregate successful amount outputs from preceding workflow nodes.",
+        _AggregateAmountsInput,
+        _AMOUNT_OUTPUT_SCHEMA,
+        _aggregate_amounts,
     ),
 }
 

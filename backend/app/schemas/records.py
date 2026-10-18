@@ -19,8 +19,21 @@ class ExternalFunctionSpec(BaseModel):
     version: str = Field(min_length=1, max_length=64)
 
 
-FunctionSpec = Annotated[
+ExecutableFunctionSpec = Annotated[
     RegisteredFunctionSpec | ExternalFunctionSpec,
+    Field(discriminator="kind"),
+]
+
+
+class PluginFunctionSpec(BaseModel):
+    """A user-facing reference to an immutable rule-plugin version."""
+
+    kind: Literal["plugin"]
+    plugin_id: str = Field(min_length=36, max_length=36)
+
+
+FunctionSpec = Annotated[
+    RegisteredFunctionSpec | ExternalFunctionSpec | PluginFunctionSpec,
     Field(discriminator="kind"),
 ]
 
@@ -46,6 +59,7 @@ class CalculationRecordResponse(BaseModel):
     period_id: str | None
     input: dict[str, Any]
     function: FunctionSpec
+    plugin: dict[str, Any] | None = None
     output: dict[str, Any] | None
     status: Literal["pending", "running", "success", "failed"]
     error: CalculationErrorResponse | None

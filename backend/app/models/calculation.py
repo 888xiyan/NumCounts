@@ -12,6 +12,7 @@ from app.models.base import Base
 class CalculationRecord(Base):
     __tablename__ = "calculation_records"
     __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uk_records_idempotency_key"),
         Index("idx_records_status_created", "status", "created_at"),
         Index("idx_records_table_period", "table_name", "period_id"),
         Index("idx_records_status_period", "status", "period_id"),
@@ -25,6 +26,10 @@ class CalculationRecord(Base):
     idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
     input_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     function_spec: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    plugin_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("rule_plugins.id"), nullable=True
+    )
+    plugin_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     output_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
