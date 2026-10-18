@@ -1,0 +1,2 @@
+"""NumCounts FastAPI application package."""
+
