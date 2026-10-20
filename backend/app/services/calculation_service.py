@@ -15,10 +15,10 @@ from app.core.errors import APIError
 from app.executors import execute_external_function, get_executor
 from app.functions import (
     FunctionExecutionError,
-    build_function_body_snapshot,
     execute_registered_function,
     get_registered_function,
 )
+from app.functions.snapshot import build_function_body_snapshot
 from app.models.calculation import CalculationAttempt, CalculationRecord
 from app.schemas.records import (
     CreateRecordRequest,

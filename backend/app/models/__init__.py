@@ -6,6 +6,13 @@ from app.models.achievement import (
 )
 from app.models.audit import AuditEvent
 from app.models.calculation import CalculationAttempt, CalculationRecord
+from app.models.formal_calculation import (
+    FormalCalculationBatch,
+    FormalCalculationBatchStatus,
+    FormalCalculationResult,
+    FormalCalculationResultSource,
+    FormalCalculationResultStatus,
+)
 from app.models.link import RecordLink, RecordLinkType
 from app.models.plugin import RulePlugin, RulePluginStatus
 from app.models.user import User, UserRole
@@ -27,6 +34,11 @@ __all__ = [
     "AuditEvent",
     "CalculationAttempt",
     "CalculationRecord",
+    "FormalCalculationBatch",
+    "FormalCalculationBatchStatus",
+    "FormalCalculationResult",
+    "FormalCalculationResultSource",
+    "FormalCalculationResultStatus",
     "RulePlugin",
     "RulePluginStatus",
     "RecordLink",

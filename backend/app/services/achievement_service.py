@@ -197,6 +197,7 @@ async def list_approved_for_calculation(
     *,
     department_id: str | None = None,
     teacher_id: str | None = None,
+    teacher_ids: list[str] | None = None,
     achievement_type: AchievementType | None = None,
     occurred_from: date | None = None,
     occurred_to: date | None = None,
@@ -215,6 +216,8 @@ async def list_approved_for_calculation(
         statement = statement.where(AchievementRecord.department_id == department_id)
     if teacher_id is not None:
         statement = statement.where(AchievementRecord.teacher_id == teacher_id)
+    if teacher_ids is not None:
+        statement = statement.where(AchievementRecord.teacher_id.in_(teacher_ids))
     if achievement_type is not None:
         statement = statement.where(
             AchievementRecord.achievement_type == achievement_type

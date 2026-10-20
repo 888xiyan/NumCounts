@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_role
 from app.db.session import get_session
-from app.functions import verify_function_body_snapshot
+from app.functions.snapshot import verify_function_body_snapshot
 from app.models.calculation import CalculationAttempt, CalculationRecord
 from app.models.user import User, UserRole
 from app.schemas.records import (

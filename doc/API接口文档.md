@@ -544,3 +544,47 @@ M1 的实际角色仅为 `ADMIN` 与 `USER`。下面的绩效管理员、学院�
 `execution` 目标未成功时，源记录响应为 `waiting`；目标失败时，源记录为 `failed` 并含 `RECORD_LINK_DEPENDENCY_FAILED`。目标重载或重新成功执行会使下游记录成为 `stale`，保留旧输出且不会自动重跑。每次实际执行尝试新增可选 `link_snapshot`，保存目标记录 ID、版本、路径和取值。
 
 本阶段接口沿用现有 `ADMIN` 角色；身份、细粒度权限和组织范围控制已挂起。完整语义见 [跨表链接与运行治理设计.md](跨表链接与运行治理设计.md)。
+
+## 13. 管理员正式核算
+
+正式核算批次仅允许 `ADMIN` 发起。服务端只从成果域读取状态为 `approved` 且处于请求周期范围内的记录；`pending_review` 或 `rejected` 成果不会进入任何结果或输入上下文。
+
+### 13.1 创建批次
+
+`POST /api/v1/formal-calculation-batches`
+
+```json
+{
+  "period_id": "2026-spring",
+  "occurred_from": "2026-03-01",
+  "occurred_to": "2026-06-30",
+  "department_id": "computer-science",
+  "teacher_ids": ["teacher-001"],
+  "workflow_id": "11111111-1111-1111-1111-111111111111",
+  "result_node_key": "total",
+  "input_mappings": [
+    {
+      "context_key": "approved_hours",
+      "aggregation": "sum",
+      "achievement_type": "teaching_workload",
+      "payload_key": "hours"
+    }
+  ]
+}
+```
+
+`input_mappings` 只支持 `count` 或按一个 `payload_key` 的 `sum`，可以按 `achievement_type`、`level` 筛选；不支持表达式、源码或动态字段路径。`result_node_key` 必须是所选工作流的节点，且其成功输出必须含数值 `amount`。
+
+接口同步按教师运行工作流，返回批次、版本化结果、成果来源快照和错误。全部成功时状态为 `pending_review`；任一教师失败时为 `failed`，已成功的其他教师结果仍被保留。空范围或指定教师缺少已审核成果返回 `409 NO_APPROVED_ACHIEVEMENTS`。
+
+### 13.2 查询与复核
+
+| 方法 | 路径 | 参数／请求 | 说明 |
+|---|---|---|---|
+| `GET` | `/formal-calculation-batches` | `period_id`、`status`、`limit` | 查询正式核算批次 |
+| `GET` | `/formal-calculation-batches/{id}` | 无 | 查询批次、结果、工作流和成果来源快照 |
+| `POST` | `/formal-calculation-batches/{id}/review` | `{"action":"confirm"}` | 将 `pending_review` 批次确认成 `reviewed` |
+| `GET` | `/formal-calculation-results` | `batch_id`、`period_id`、`teacher_id`、`limit` | 查询教师的版本化正式结果 |
+| `GET` | `/formal-calculation-results/export` | 至少传 `batch_id` 或 `period_id`，可选 `teacher_id` | 下载成功结果与成果来源明细 CSV，并写入导出审计 |
+
+对同一教师和周期重新发起计算会创建新的 `result_version`，不会覆盖旧结果。批次创建、完成和复核均写入审计事件；每项结果经工作流运行可追溯到底层计算记录及 M4 函数本体快照。成员读取、导出和组织范围过滤属于后续 M6。
