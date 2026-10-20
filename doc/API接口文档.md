@@ -468,7 +468,7 @@ M1 的实际角色仅为 `ADMIN` 与 `USER`。下面的绩效管理员、学院�
 | 重载与重试 | 是 | 是 | 本学院 | 否 |
 | 管理函数与执行器 | 是 | 否 | 否 | 否 |
 
-当前已保存不可变执行尝试及函数本体快照；链接创建／删除和中断恢复事件可通过 `/audit-events` 查询。完整的查看、导出、审核和申诉审计范围仍待后续业务规则确认。
+当前已保存不可变执行尝试及函数本体快照；链接创建／删除和中断恢复事件可通过 `/audit-events` 查询。M7 已将特殊绩效和申诉的草稿变更、提交冻结、处理、复核、时限调整和插件失败写入同一审计边界；通知投递本身尚未实现。
 
 ## 10. 版本与兼容性
 
@@ -599,3 +599,28 @@ M1 的实际角色仅为 `ADMIN` 与 `USER`。下面的绩效管理员、学院�
 | `GET` | `/me/formal-calculation-results/export` | 必填 `period_id` | 导出本人该周期正式结果 CSV，并写入导出审计 |
 
 个人结果的教师范围由登录账号的 `teacher_id` 决定，接口不接受客户端提供的教师、批次或院系范围。未绑定教师档案返回 `409 TEACHER_PROFILE_NOT_LINKED`。完整边界见 [成员自助与个人结果设计.md](成员自助与个人结果设计.md)。
+
+## 15. 特殊绩效与申诉（M7）
+
+M7 接口已实现；其数据库迁移脚本已生成，须在获准后另行执行迁移。两类事项的状态为 `draft`、`submitted`、`reviewing`、`approved`、`processed`。提交冻结表单及材料清单，成员之后只能在被打回回到 `draft` 后继续修改。审核通过的事项通过 `purpose=special_case` 的规则插件创建 `approved` 成果记录；不会直接写入正式核算结果，管理员仍需通过 M5 重新核算创建新结果版本。
+
+| 方法 | 路径 | 权限 | 参数 / 说明 |
+|---|---|---|---|
+| `POST` | `/special-performance-cases` | `USER` | 创建特殊绩效或申诉草稿；申诉必须指定本人已复核正式结果 ID |
+| `GET` | `/special-performance-cases/mine` | `USER` | 查询本人事项，可按 `status` 过滤 |
+| `GET` | `/special-performance-cases` | `ADMIN` | 查询审核队列，可按 `status`、`overdue_only` 过滤 |
+| `GET` | `/special-performance-cases/{case_id}` | 本人 / `ADMIN` | 查询表单、冻结快照、材料元数据和事件轨迹 |
+| `PATCH` | `/special-performance-cases/{case_id}` | `USER` | 修改本人 `draft` 的标题、申报 JSON、姓名或院系信息 |
+| `POST` | `/special-performance-cases/{case_id}/materials/{material_key}?filename=...` | `USER` | 草稿上传原始文件字节；`Content-Type` 为文件媒体类型，最多 10 MiB；同 key 上传创建新版本 |
+| `GET` | `/special-performance-cases/{case_id}/materials` | 本人 / `ADMIN` | 查询材料元数据与版本 |
+| `GET` | `/special-performance-cases/{case_id}/materials/{material_id}/content` | 本人 / `ADMIN` | 下载材料原始内容 |
+| `DELETE` | `/special-performance-cases/{case_id}/materials/{material_id}` | `USER` | 从本人草稿撤下当前材料版本，不删除历史文件 |
+| `POST` | `/special-performance-cases/{case_id}/submit` | `USER` | 至少需有一份当前材料；生成提交版本及默认三天截止时间 |
+| `POST` | `/special-performance-cases/{case_id}/handle` | `ADMIN` | `start_review` 受理，或以必填原因打回草稿 |
+| `POST` | `/special-performance-cases/{case_id}/review` | `ADMIN` | 复核通过并选择专用插件，或以必填原因打回草稿 |
+| `POST` | `/special-performance-cases/{case_id}/process-plugin` | `ADMIN` | 运行或重试已通过事项的专用插件；失败回到草稿并保留错误 |
+| `PATCH` | `/special-performance-cases/{case_id}/deadline` | `ADMIN` | 修改截止时间，必须填写原因 |
+
+专用插件沿用 `POST /rule-plugins`，字段 `purpose` 可选值为 `general` 或 `special_case`，默认 `general`。专用插件必须启用且输出符合 `achievement_type`、`level`、`occurred_at`、`payload` JSON 契约，不能用作普通工作流插件。
+
+所有状态和材料操作均生成领域事件及审计记录。通知仍未发送，系统仅写入 `notification_requested` 事件。详细数据约束及错误处理见 [特殊绩效与申诉设计.md](特殊绩效与申诉设计.md)。
