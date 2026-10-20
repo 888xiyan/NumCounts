@@ -237,6 +237,7 @@ async def create_record_from_plugin_snapshot(
     period_id: str | None,
     input_data: dict[str, Any],
     plugin_snapshot: dict[str, Any],
+    idempotency_key: str | None = None,
     requested_by_user_id: str | None = None,
     workflow_run_id: str | None = None,
 ) -> CalculationRecord:
@@ -248,6 +249,28 @@ async def create_record_from_plugin_snapshot(
     the public API.
     """
     _ensure_json_size(input_data, field_name="input")
+    function_spec = {"kind": "plugin", "plugin_id": plugin_snapshot.get("id")}
+    if idempotency_key is not None:
+        existing = await session.scalar(
+            select(CalculationRecord).where(
+                CalculationRecord.idempotency_key == idempotency_key
+            )
+        )
+        if existing is not None:
+            if _record_matches_request(
+                existing,
+                table_name=table_name,
+                period_id=period_id,
+                input_data=input_data,
+                function_spec=function_spec,
+                plugin_snapshot=plugin_snapshot,
+            ):
+                return existing
+            raise APIError(
+                status_code=409,
+                code="IDEMPOTENCY_KEY_REUSED",
+                message="idempotency key was already used with a different request",
+            )
     plugin_id = plugin_snapshot.get("id")
     effective_function = plugin_snapshot.get("function")
     if not isinstance(plugin_id, str) or not isinstance(effective_function, dict):
@@ -270,9 +293,10 @@ async def create_record_from_plugin_snapshot(
         table_name=table_name,
         period_id=period_id,
         input_data=input_data,
-        function_spec={"kind": "plugin", "plugin_id": plugin_id},
+        function_spec=function_spec,
         plugin_id=plugin_id,
         plugin_snapshot=plugin_snapshot,
+        idempotency_key=idempotency_key,
         requested_by_user_id=requested_by_user_id,
         workflow_run_id=workflow_run_id,
         status="pending",
@@ -282,7 +306,31 @@ async def create_record_from_plugin_snapshot(
         updated_at=now,
     )
     session.add(record)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as error:
+        await session.rollback()
+        if idempotency_key is None:
+            raise
+        existing = await session.scalar(
+            select(CalculationRecord).where(
+                CalculationRecord.idempotency_key == idempotency_key
+            )
+        )
+        if existing is not None and _record_matches_request(
+            existing,
+            table_name=table_name,
+            period_id=period_id,
+            input_data=input_data,
+            function_spec=function_spec,
+            plugin_snapshot=plugin_snapshot,
+        ):
+            return existing
+        raise APIError(
+            status_code=409,
+            code="IDEMPOTENCY_KEY_REUSED",
+            message="idempotency key was already used with a different request",
+        ) from error
     await session.refresh(record)
     return record
 

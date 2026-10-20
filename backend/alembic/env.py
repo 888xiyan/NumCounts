@@ -11,6 +11,7 @@ import app.models.calculation  # noqa: F401
 import app.models.formal_calculation  # noqa: F401
 import app.models.link  # noqa: F401
 import app.models.plugin  # noqa: F401
+import app.models.special_performance  # noqa: F401
 import app.models.user  # noqa: F401
 import app.models.workflow  # noqa: F401
 from alembic import context

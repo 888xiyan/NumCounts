@@ -23,6 +23,7 @@ class AchievementSource(enum.StrEnum):
     ACADEMIC_AFFAIRS = "academic_affairs"
     RESEARCH_SYSTEM = "research_system"
     MANUAL_DECLARATION = "manual_declaration"
+    SPECIAL_PERFORMANCE = "special_performance"
 
 
 class AchievementStatus(enum.StrEnum):

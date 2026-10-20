@@ -15,6 +15,11 @@ class RulePluginStatus(enum.StrEnum):
     DISABLED = "disabled"
 
 
+class RulePluginPurpose(enum.StrEnum):
+    GENERAL = "general"
+    SPECIAL_CASE = "special_case"
+
+
 class RulePlugin(Base):
     """An immutable, versioned shortcut to an approved executable function."""
 
@@ -33,6 +38,9 @@ class RulePlugin(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     function_spec: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     input_defaults: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    purpose: Mapped[RulePluginPurpose] = mapped_column(
+        String(24), nullable=False, default=RulePluginPurpose.GENERAL
+    )
     status: Mapped[RulePluginStatus] = mapped_column(
         String(16), nullable=False, default=RulePluginStatus.DISABLED
     )

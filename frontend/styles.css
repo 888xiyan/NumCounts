@@ -14,7 +14,7 @@ h2 { margin-bottom: 12px; font-size: 1.15rem; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .run-card { margin-top: 20px; }
 label { display: grid; gap: 7px; margin: 13px 0; color: #40536b; font-size: .92rem; font-weight: 650; }
-input, textarea { width: 100%; border: 1px solid #c6d3e2; border-radius: 8px; padding: 10px 11px; color: #172334; font: inherit; background: #fbfdff; }
+input, textarea, select { width: 100%; border: 1px solid #c6d3e2; border-radius: 8px; padding: 10px 11px; color: #172334; font: inherit; background: #fbfdff; }
 textarea { font-family: "SFMono-Regular", Consolas, monospace; font-size: .82rem; line-height: 1.5; resize: vertical; }
 button { border: 0; border-radius: 8px; padding: 10px 14px; color: #fff; background: #2367c9; cursor: pointer; font: inherit; font-weight: 700; }
 button:hover { background: #1957ad; }
@@ -26,6 +26,14 @@ button.ghost:hover { background: #ddeaff; }
 .record code { margin: 6px 0; word-break: break-all; color: #53657c; }
 .record .actions { display: flex; gap: 8px; margin-top: 8px; }
 .record .actions button { padding: 6px 9px; font-size: .8rem; }
+.case-record { display: grid; gap: 8px; }
+.case-record details { border-top: 1px solid #dce5f0; padding-top: 10px; }
+.case-record summary { color: #2367c9; cursor: pointer; font-weight: 700; }
+.case-record label { font-weight: 500; }
+.case-record .actions, .material-list { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.material-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 4px 0; }
+.material-row span { color: #53657c; }
+.case-json { max-height: 180px; margin: 0; font-size: .76rem; }
 .run-fields { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
 #notice { min-height: 24px; margin: 0 0 14px; color: #22663a; font-weight: 650; }
 #notice.error { color: #a12d32; }

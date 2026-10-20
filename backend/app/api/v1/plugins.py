@@ -30,6 +30,7 @@ def _plugin_response(plugin: RulePlugin) -> RulePluginResponse:
         description=plugin.description,
         function=plugin.function_spec,
         input_defaults=plugin.input_defaults,
+        purpose=plugin.purpose,
         status=plugin.status,
         created_at=plugin.created_at,
         updated_at=plugin.updated_at,

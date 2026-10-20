@@ -14,7 +14,14 @@ from app.models.formal_calculation import (
     FormalCalculationResultStatus,
 )
 from app.models.link import RecordLink, RecordLinkType
-from app.models.plugin import RulePlugin, RulePluginStatus
+from app.models.plugin import RulePlugin, RulePluginPurpose, RulePluginStatus
+from app.models.special_performance import (
+    SpecialPerformanceCase,
+    SpecialPerformanceCaseEvent,
+    SpecialPerformanceCaseMaterial,
+    SpecialPerformanceCaseStatus,
+    SpecialPerformanceCaseType,
+)
 from app.models.user import User, UserRole
 from app.models.workflow import (
     WorkflowDefinition,
@@ -40,7 +47,13 @@ __all__ = [
     "FormalCalculationResult",
     "FormalCalculationResultSource",
     "FormalCalculationResultStatus",
+    "SpecialPerformanceCase",
+    "SpecialPerformanceCaseEvent",
+    "SpecialPerformanceCaseMaterial",
+    "SpecialPerformanceCaseStatus",
+    "SpecialPerformanceCaseType",
     "RulePlugin",
+    "RulePluginPurpose",
     "RulePluginStatus",
     "RecordLink",
     "RecordLinkType",

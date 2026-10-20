@@ -34,6 +34,7 @@ def plugin_snapshot(plugin: RulePlugin) -> dict[str, Any]:
         "description": plugin.description,
         "function": plugin.function_spec,
         "input_defaults": plugin.input_defaults,
+        "purpose": str(plugin.purpose),
     }
 
 
@@ -73,6 +74,7 @@ async def create_rule_plugin(
         description=request.description,
         function_spec=request.function.model_dump(),
         input_defaults=request.input_defaults,
+        purpose=request.purpose,
         status=RulePluginStatus.DISABLED,
         created_at=now,
         updated_at=now,
@@ -136,5 +138,12 @@ async def resolve_enabled_plugin_snapshot(
             code="RULE_PLUGIN_DISABLED",
             message="disabled rule plugins cannot be used for new records",
             details={"plugin_id": plugin_id},
+        )
+    if plugin.purpose != "general":
+        raise APIError(
+            status_code=409,
+            code="RULE_PLUGIN_PURPOSE_MISMATCH",
+            message="special-case plugins cannot be used in general workflows",
+            details={"plugin_id": plugin_id, "purpose": plugin.purpose},
         )
     return plugin_snapshot(plugin)

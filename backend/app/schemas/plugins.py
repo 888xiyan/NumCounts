@@ -20,6 +20,7 @@ class CreateRulePluginRequest(BaseModel):
     description: str = Field(default="", max_length=1000)
     function: ExecutableFunctionSpec
     input_defaults: dict[str, Any] = Field(default_factory=dict)
+    purpose: Literal["general", "special_case"] = "general"
 
 
 class RulePluginResponse(BaseModel):
@@ -30,6 +31,7 @@ class RulePluginResponse(BaseModel):
     description: str
     function: ExecutableFunctionSpec
     input_defaults: dict[str, Any]
+    purpose: Literal["general", "special_case"]
     status: Literal["enabled", "disabled"]
     created_at: datetime
     updated_at: datetime

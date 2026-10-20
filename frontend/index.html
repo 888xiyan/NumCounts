@@ -10,30 +10,57 @@
     <main class="shell">
       <header>
         <div>
-          <p class="eyebrow">NUMCOUNTS · 阶段三</p>
-          <h1>规则插件与工作流操作台</h1>
-          <p class="subtitle">配置规则、编排计算、查看每一步的可追溯结果。</p>
+          <p class="eyebrow">NUMCOUNTS · M7</p>
+          <h1>绩效操作台</h1>
+          <p class="subtitle">管理员配置规则并审核特殊事项；成员可申报、跟踪和查询处理结果。</p>
         </div>
         <button id="logout" class="ghost" hidden>退出登录</button>
       </header>
       <section id="login-card" class="card narrow">
-        <h2>管理员登录</h2>
+        <h2>账号登录</h2>
         <label>服务地址 <input id="api-base" value="http://127.0.0.1:8000/api/v1" /></label>
         <label>用户名 <input id="username" value="admin" autocomplete="username" /></label>
         <label>密码 <input id="password" type="password" autocomplete="current-password" /></label>
-        <button id="login">登录操作台</button>
+        <button id="login">登录</button>
       </section>
       <section id="console" hidden>
         <div id="notice" role="status"></div>
+        <section id="member-console" hidden>
+          <section class="card">
+            <h2>发起特殊绩效 / 申诉</h2>
+            <p>先保存草稿并上传证明材料；提交后本次内容将冻结。被打回后可继续修改并重新提交。</p>
+            <div class="run-fields">
+              <label>事项类型
+                <select id="case-type"><option value="special_performance">特殊绩效</option><option value="appeal">绩效申诉</option></select>
+              </label>
+              <label>事项标题 <input id="case-title" placeholder="例如：校级专项工作认定" /></label>
+            </div>
+            <div id="special-case-fields" class="run-fields">
+              <label>考核周期 <input id="case-period" placeholder="例如：2026-annual" /></label>
+              <label>教师姓名 <input id="case-teacher-name" /></label>
+              <label>院系 ID <input id="case-department" /></label>
+            </div>
+            <label id="appeal-result-field" hidden>被申诉正式结果 ID <input id="appeal-result-id" /></label>
+            <label>申报信息 JSON<textarea id="case-form-data" rows="5">{"reason":"","description":""}</textarea></label>
+            <button id="create-case">保存草稿</button>
+          </section>
+          <section class="card run-card">
+            <div class="section-heading"><h2>我的特殊事项</h2><button id="refresh-my-cases" class="ghost">刷新</button></div>
+            <div id="my-cases" class="records"></div>
+          </section>
+        </section>
+        <section id="admin-console" hidden>
         <div class="grid">
           <section class="card">
             <div class="section-heading"><h2>规则插件</h2><button id="refresh-plugins" class="ghost">刷新</button></div>
             <p>插件封装已登记函数与默认输入。创建后需启用，才能供新记录或工作流使用。</p>
+            <p>特殊绩效处理插件需将 <code>purpose</code> 设为 <code>special_case</code>；它只能处理审批通过的冻结快照，不能用于普通工作流。</p>
             <label>插件定义 JSON<textarea id="plugin-json" rows="12">{
   "plugin_key": "teaching_hourly",
   "version": "1.0.0",
   "name": "教学课时绩效",
   "description": "使用固定单价和质量系数",
+  "purpose": "general",
   "function": {"kind": "registered", "name": "teaching_performance", "version": "1.0.0"},
   "input_defaults": {"rate": 80, "quality_factor": 1.1}
 }</textarea></label>
@@ -67,6 +94,12 @@
           <label>运行上下文 JSON<textarea id="run-context" rows="4">{"approved_hours": 36}</textarea></label>
           <button id="run-workflow">执行工作流</button>
           <pre id="run-result" hidden></pre>
+        </section>
+        <section class="card run-card">
+          <div class="section-heading"><h2>特殊绩效与申诉审核队列</h2><button id="refresh-admin-cases" class="ghost">刷新</button></div>
+          <p>管理员分别执行受理、复核和专用插件处理。审核通过不会覆盖正式结果。</p>
+          <div id="admin-cases" class="records"></div>
+        </section>
         </section>
       </section>
     </main>
