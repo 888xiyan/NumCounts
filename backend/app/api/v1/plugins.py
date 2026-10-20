@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_role
+from app.core.errors import APIError
 from app.db.session import get_session
 from app.models.plugin import RulePlugin, RulePluginStatus
 from app.models.user import User, UserRole
@@ -48,8 +49,10 @@ async def create_plugin(
 async def list_plugins(
     status_filter: RulePluginStatus | None = Query(default=None, alias="status"),
     session: AsyncSession = Depends(get_session),
-    _: User = Depends(require_role(UserRole.ADMIN)),
+    user: User = Depends(require_role(UserRole.ADMIN, UserRole.USER)),
 ) -> RulePluginListResponse:
+    if user.role == UserRole.USER:
+        status_filter = RulePluginStatus.ENABLED
     plugins = await list_rule_plugins(session, status=status_filter)
     return RulePluginListResponse(data=[_plugin_response(plugin) for plugin in plugins])
 
@@ -58,9 +61,16 @@ async def list_plugins(
 async def get_plugin(
     plugin_id: str,
     session: AsyncSession = Depends(get_session),
-    _: User = Depends(require_role(UserRole.ADMIN)),
+    user: User = Depends(require_role(UserRole.ADMIN, UserRole.USER)),
 ) -> RulePluginResponse:
-    return _plugin_response(await get_rule_plugin(session, plugin_id=plugin_id))
+    plugin = await get_rule_plugin(session, plugin_id=plugin_id)
+    if user.role == UserRole.USER and plugin.status != RulePluginStatus.ENABLED:
+        raise APIError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="RULE_PLUGIN_NOT_AVAILABLE",
+            message="rule plugin is not available to members",
+        )
+    return _plugin_response(plugin)
 
 
 @router.post("/{plugin_id}/enable", response_model=RulePluginResponse)

@@ -22,6 +22,14 @@ class WorkflowRunStatus(enum.StrEnum):
     FAILED = "failed"
 
 
+class WorkflowRunMode(enum.StrEnum):
+    """Persistence boundary for operator, member-trial, and formal runs."""
+
+    OPERATOR = "operator"
+    MEMBER_TRIAL = "member_trial"
+    FORMAL = "formal"
+
+
 class WorkflowNodeRunStatus(enum.StrEnum):
     PENDING = "pending"
     RUNNING = "running"
@@ -77,6 +85,12 @@ class WorkflowRun(Base):
     __tablename__ = "workflow_runs"
     __table_args__ = (
         Index("idx_workflow_runs_workflow_started", "workflow_id", "started_at"),
+        Index(
+            "idx_workflow_runs_requester_mode_started",
+            "requested_by_user_id",
+            "run_mode",
+            "started_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(
@@ -89,6 +103,9 @@ class WorkflowRun(Base):
     workflow_version: Mapped[str] = mapped_column(String(64), nullable=False)
     period_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     context: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    run_mode: Mapped[WorkflowRunMode] = mapped_column(
+        String(16), nullable=False, default=WorkflowRunMode.OPERATOR
+    )
     status: Mapped[WorkflowRunStatus] = mapped_column(String(16), nullable=False)
     result_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)

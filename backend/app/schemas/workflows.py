@@ -143,6 +143,7 @@ class WorkflowRunResponse(BaseModel):
     workflow_version: str
     period_id: str | None
     context: dict[str, Any]
+    run_mode: Literal["operator", "member_trial", "formal"]
     status: Literal["running", "success", "failed"]
     result: dict[str, Any] | None
     error: dict[str, Any] | None

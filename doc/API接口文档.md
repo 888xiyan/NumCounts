@@ -587,4 +587,15 @@ M1 的实际角色仅为 `ADMIN` 与 `USER`。下面的绩效管理员、学院�
 | `GET` | `/formal-calculation-results` | `batch_id`、`period_id`、`teacher_id`、`limit` | 查询教师的版本化正式结果 |
 | `GET` | `/formal-calculation-results/export` | 至少传 `batch_id` 或 `period_id`，可选 `teacher_id` | 下载成功结果与成果来源明细 CSV，并写入导出审计 |
 
-对同一教师和周期重新发起计算会创建新的 `result_version`，不会覆盖旧结果。批次创建、完成和复核均写入审计事件；每项结果经工作流运行可追溯到底层计算记录及 M4 函数本体快照。成员读取、导出和组织范围过滤属于后续 M6。
+对同一教师和周期重新发起计算会创建新的 `result_version`，不会覆盖旧结果。批次创建、完成和复核均写入审计事件；每项结果经工作流运行可追溯到底层计算记录及 M4 函数本体快照。
+
+## 14. 成员自助与个人结果
+
+`USER` 只能读取 `enabled` 插件和 `active` 工作流，不能创建、启停或读取未发布定义。成员调用既有 `POST /workflows/{workflow_id}/runs` 时，服务端固定将运行保存为 `member_trial`；查询 `/workflows/{workflow_id}/runs` 和 `/workflow-runs/{id}` 时只返回该成员自己的试算。请求不能指定或修改运行模式。
+
+| 方法 | 路径 | 参数 | 说明 |
+|---|---|---|---|
+| `GET` | `/me/formal-calculation-results` | 可选 `period_id`、`limit` | 查询本人已复核且成功的正式结果、版本与成果来源快照 |
+| `GET` | `/me/formal-calculation-results/export` | 必填 `period_id` | 导出本人该周期正式结果 CSV，并写入导出审计 |
+
+个人结果的教师范围由登录账号的 `teacher_id` 决定，接口不接受客户端提供的教师、批次或院系范围。未绑定教师档案返回 `409 TEACHER_PROFILE_NOT_LINKED`。完整边界见 [成员自助与个人结果设计.md](成员自助与个人结果设计.md)。

@@ -37,4 +37,9 @@ async def login(
 
 @router.get("/me", response_model=CurrentUserResponse)
 async def current_user(user: User = Depends(get_current_user)) -> CurrentUserResponse:
-    return CurrentUserResponse(id=user.id, username=user.username, role=user.role.value)
+    return CurrentUserResponse(
+        id=user.id,
+        username=user.username,
+        role=user.role.value,
+        teacher_id=user.teacher_id,
+    )

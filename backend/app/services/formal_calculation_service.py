@@ -19,7 +19,12 @@ from app.models.formal_calculation import (
     FormalCalculationResultStatus,
 )
 from app.models.user import User
-from app.models.workflow import WorkflowDefinition, WorkflowRun, WorkflowStatus
+from app.models.workflow import (
+    WorkflowDefinition,
+    WorkflowRun,
+    WorkflowRunMode,
+    WorkflowStatus,
+)
 from app.schemas.formal_calculations import (
     AchievementInputMapping,
     CreateFormalCalculationBatchRequest,
@@ -302,6 +307,7 @@ async def start_formal_calculation_batch(
                     context=contexts[teacher_id],
                 ),
                 user=user,
+                run_mode=WorkflowRunMode.FORMAL,
             )
             result_data = workflow_run.result_data
             if workflow_run.status != "success":

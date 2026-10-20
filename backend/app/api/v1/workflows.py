@@ -4,12 +4,14 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_role
+from app.core.errors import APIError
 from app.db.session import get_session
 from app.models.user import User, UserRole
 from app.models.workflow import (
     WorkflowDefinition,
     WorkflowNode,
     WorkflowRun,
+    WorkflowRunMode,
     WorkflowRunNode,
     WorkflowStatus,
 )
@@ -102,6 +104,7 @@ async def _run_response(
         workflow_version=workflow_run.workflow_version,
         period_id=workflow_run.period_id,
         context=workflow_run.context,
+        run_mode=workflow_run.run_mode,
         status=workflow_run.status,
         result=workflow_run.result_data,
         error=error,
@@ -133,8 +136,10 @@ async def create_workflow(
 async def list_workflow_definitions(
     status_filter: WorkflowStatus | None = Query(default=None, alias="status"),
     session: AsyncSession = Depends(get_session),
-    _: User = Depends(require_role(UserRole.ADMIN)),
+    user: User = Depends(require_role(UserRole.ADMIN, UserRole.USER)),
 ) -> WorkflowDefinitionListResponse:
+    if user.role == UserRole.USER:
+        status_filter = WorkflowStatus.ACTIVE
     workflows = await list_workflows(session, status=status_filter)
     return WorkflowDefinitionListResponse(
         data=[await _workflow_response(session, workflow) for workflow in workflows]
@@ -145,11 +150,16 @@ async def list_workflow_definitions(
 async def get_workflow(
     workflow_id: str,
     session: AsyncSession = Depends(get_session),
-    _: User = Depends(require_role(UserRole.ADMIN)),
+    user: User = Depends(require_role(UserRole.ADMIN, UserRole.USER)),
 ) -> WorkflowDefinitionResponse:
-    return await _workflow_response(
-        session, await get_workflow_definition(session, workflow_id=workflow_id)
-    )
+    workflow = await get_workflow_definition(session, workflow_id=workflow_id)
+    if user.role == UserRole.USER and workflow.status != WorkflowStatus.ACTIVE:
+        raise APIError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="WORKFLOW_NOT_AVAILABLE",
+            message="workflow is not available to members",
+        )
+    return await _workflow_response(session, workflow)
 
 
 @router.post("/{workflow_id}/activate", response_model=WorkflowDefinitionResponse)
@@ -185,10 +195,18 @@ async def create_workflow_run(
     workflow_id: str,
     request: StartWorkflowRunRequest,
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(require_role(UserRole.ADMIN)),
+    user: User = Depends(require_role(UserRole.ADMIN, UserRole.USER)),
 ) -> WorkflowRunResponse:
     workflow_run, _ = await start_workflow_run(
-        session, workflow_id=workflow_id, request=request, user=user
+        session,
+        workflow_id=workflow_id,
+        request=request,
+        user=user,
+        run_mode=(
+            WorkflowRunMode.MEMBER_TRIAL
+            if user.role == UserRole.USER
+            else WorkflowRunMode.OPERATOR
+        ),
     )
     return await _run_response(session, workflow_run)
 
@@ -198,9 +216,17 @@ async def list_runs(
     workflow_id: str,
     limit: int = Query(default=50, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
-    _: User = Depends(require_role(UserRole.ADMIN)),
+    user: User = Depends(require_role(UserRole.ADMIN, UserRole.USER)),
 ) -> WorkflowRunListResponse:
-    runs = await list_workflow_runs(session, workflow_id=workflow_id, limit=limit)
+    runs = await list_workflow_runs(
+        session,
+        workflow_id=workflow_id,
+        limit=limit,
+        requested_by_user_id=user.id if user.role == UserRole.USER else None,
+        run_mode=(
+            WorkflowRunMode.MEMBER_TRIAL if user.role == UserRole.USER else None
+        ),
+    )
     return WorkflowRunListResponse(
         data=[await _run_response(session, workflow_run) for workflow_run in runs]
     )
@@ -210,8 +236,16 @@ async def list_runs(
 async def get_run(
     workflow_run_id: str,
     session: AsyncSession = Depends(get_session),
-    _: User = Depends(require_role(UserRole.ADMIN)),
+    user: User = Depends(require_role(UserRole.ADMIN, UserRole.USER)),
 ) -> WorkflowRunResponse:
-    return await _run_response(
-        session, await get_workflow_run(session, workflow_run_id=workflow_run_id)
-    )
+    workflow_run = await get_workflow_run(session, workflow_run_id=workflow_run_id)
+    if user.role == UserRole.USER and (
+        workflow_run.requested_by_user_id != user.id
+        or workflow_run.run_mode != WorkflowRunMode.MEMBER_TRIAL
+    ):
+        raise APIError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="WORKFLOW_RUN_NOT_FOUND",
+            message="workflow run was not found",
+        )
+    return await _run_response(session, workflow_run)

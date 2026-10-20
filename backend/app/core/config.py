@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     seed_admin_password: str
     seed_user_username: str = "user"
     seed_user_password: str
+    seed_user_teacher_id: str | None = None
     runner_poll_interval_seconds: float = 1.0
     runner_batch_size: int = 100
     external_executors: list[ExternalExecutorSettings] = Field(default_factory=list)

@@ -18,4 +18,4 @@ class CurrentUserResponse(BaseModel):
     id: str
     username: str
     role: Literal["USER", "ADMIN"]
-
+    teacher_id: str | None

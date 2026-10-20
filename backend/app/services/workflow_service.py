@@ -17,6 +17,7 @@ from app.models.workflow import (
     WorkflowNode,
     WorkflowNodeRunStatus,
     WorkflowRun,
+    WorkflowRunMode,
     WorkflowRunNode,
     WorkflowRunStatus,
     WorkflowStatus,
@@ -296,6 +297,7 @@ async def start_workflow_run(
     workflow_id: str,
     request: StartWorkflowRunRequest,
     user: User,
+    run_mode: WorkflowRunMode = WorkflowRunMode.OPERATOR,
 ) -> tuple[WorkflowRun, list[WorkflowRunNode]]:
     """Run one immutable workflow definition sequentially for an operator."""
     _ensure_json_object(request.context, field="workflow context")
@@ -315,6 +317,7 @@ async def start_workflow_run(
         workflow_version=workflow.version,
         period_id=request.period_id,
         context=request.context,
+        run_mode=run_mode,
         status=WorkflowRunStatus.RUNNING,
         requested_by_user_id=user.id,
         started_at=now,
@@ -454,13 +457,20 @@ async def list_workflow_run_nodes(
 
 
 async def list_workflow_runs(
-    session: AsyncSession, *, workflow_id: str, limit: int
+    session: AsyncSession,
+    *,
+    workflow_id: str,
+    limit: int,
+    requested_by_user_id: str | None = None,
+    run_mode: WorkflowRunMode | None = None,
 ) -> list[WorkflowRun]:
     await get_workflow_definition(session, workflow_id=workflow_id)
-    statement = (
-        select(WorkflowRun)
-        .where(WorkflowRun.workflow_id == workflow_id)
-        .order_by(WorkflowRun.started_at.desc())
-        .limit(limit)
-    )
+    statement = select(WorkflowRun).where(WorkflowRun.workflow_id == workflow_id)
+    if requested_by_user_id is not None:
+        statement = statement.where(
+            WorkflowRun.requested_by_user_id == requested_by_user_id
+        )
+    if run_mode is not None:
+        statement = statement.where(WorkflowRun.run_mode == run_mode)
+    statement = statement.order_by(WorkflowRun.started_at.desc()).limit(limit)
     return list((await session.scalars(statement)).all())
