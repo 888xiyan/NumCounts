@@ -328,7 +328,7 @@ Idempotency-Key: 4a353e8e-3578-4dda-954d-5d5063d4509e
 
 | 方法 | 路径 | 权限 | 说明 |
 |---|---|---|---|
-| `POST` | `/achievements/declarations` | 登录用户 | 手工申报本人成果，教师 ID 由服务端取当前用户 |
+| `POST` | `/achievements/declarations` | 登录用户 | 手工申报本人成果，教师 ID 由服务端取账号绑定的教师档案 |
 | `POST` | `/achievements/import` | `ADMIN` | 导入教务或科研来源记录，单次最多 100 条 |
 | `GET` | `/achievements` | 登录用户 | 查询成果；非管理员仅返回本人记录 |
 | `GET` | `/achievements/{record_id}` | 登录用户 | 查询单条有权限访问的成果 |
@@ -355,7 +355,7 @@ Idempotency-Key: 4a353e8e-3578-4dda-954d-5d5063d4509e
 }
 ```
 
-服务端使用当前 JWT 用户作为 `teacher_id` 和 `teacher_name`，忽略并拒绝客户端伪造的教师字段；成功返回 `201` 与 `status=pending_review`。
+服务端使用当前 JWT 账号绑定的 `teacher_id`，并以账号名作为 `teacher_name`；忽略并拒绝客户端伪造的教师字段。账号未绑定教师档案时返回 `409 TEACHER_PROFILE_NOT_LINKED`；成功返回 `201` 与 `status=pending_review`。
 
 ### 6.2 教务或科研来源导入
 
@@ -537,7 +537,7 @@ M1 的实际角色仅为 `ADMIN` 与 `USER`。下面的绩效管理员、学院�
 | `POST` | `/record-links` | 创建 `data` 或 `execution` 链接并拒绝循环 |
 | `GET` | `/record-links?source_record_id={id}` | 查询源记录链接 |
 | `DELETE` | `/record-links/{id}` | 删除链接 |
-| `GET` | `/runtime/summary` | 查询状态、积压、链接与运行尝试指标 |
+| `GET` | `/runtime/summary` | 查询记录状态/总量/失败数、最早待处理与运行时间、链接与运行尝试指标 |
 | `POST` | `/runtime/recover-interrupted` | 恢复遗留 `running` 记录 |
 | `GET` | `/audit-events` | 查询链接与恢复审计事件 |
 
@@ -602,7 +602,7 @@ M1 的实际角色仅为 `ADMIN` 与 `USER`。下面的绩效管理员、学院�
 
 ## 15. 特殊绩效与申诉（M7）
 
-M7 接口已实现；其数据库迁移脚本已生成，须在获准后另行执行迁移。两类事项的状态为 `draft`、`submitted`、`reviewing`、`approved`、`processed`。提交冻结表单及材料清单，成员之后只能在被打回回到 `draft` 后继续修改。审核通过的事项通过 `purpose=special_case` 的规则插件创建 `approved` 成果记录；不会直接写入正式核算结果，管理员仍需通过 M5 重新核算创建新结果版本。
+M7 接口已实现；迁移 `20261020_0011` 已在获授权的本地开发库执行，其他环境须独立迁移。两类事项的状态为 `draft`、`submitted`、`reviewing`、`approved`、`processed`。提交冻结表单及材料清单，成员之后只能在被打回回到 `draft` 后继续修改。审核通过的事项通过 `purpose=special_case` 的规则插件创建 `approved` 成果记录；不会直接写入正式核算结果，管理员仍需通过 M5 重新核算创建新结果版本。
 
 | 方法 | 路径 | 权限 | 参数 / 说明 |
 |---|---|---|---|

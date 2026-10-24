@@ -42,7 +42,8 @@ def _as_api_error(error: AchievementBusinessError) -> APIError:
 
 def can_access_achievement(user: User, record: AchievementRecord) -> bool:
     return user.role == UserRole.ADMIN or (
-        record.submitted_by_user_id == user.id or record.teacher_id == user.id
+        record.submitted_by_user_id == user.id
+        or (user.teacher_id is not None and record.teacher_id == user.teacher_id)
     )
 
 
@@ -180,11 +181,11 @@ async def list_achievements(
     if teacher_id is not None:
         statement = statement.where(AchievementRecord.teacher_id == teacher_id)
     if user.role != UserRole.ADMIN:
+        ownership_filters = [AchievementRecord.submitted_by_user_id == user.id]
+        if user.teacher_id is not None:
+            ownership_filters.append(AchievementRecord.teacher_id == user.teacher_id)
         statement = statement.where(
-            or_(
-                AchievementRecord.submitted_by_user_id == user.id,
-                AchievementRecord.teacher_id == user.id,
-            )
+            or_(*ownership_filters)
         )
     statement = statement.order_by(
         AchievementRecord.occurred_at, AchievementRecord.id

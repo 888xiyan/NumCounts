@@ -78,9 +78,14 @@ def create_manual_record(
     level: str, occurred_at: Any, payload: dict[str, Any], now: datetime | None = None
 ) -> AchievementRecord:
     ensure_active_user(user)
+    if user.teacher_id is None:
+        raise AchievementBusinessError(
+            "TEACHER_PROFILE_NOT_LINKED",
+            "member account is not linked to a teacher profile",
+        )
     timestamp = now or now_utc()
     return AchievementRecord(
-        teacher_id=user.id,
+        teacher_id=user.teacher_id,
         teacher_name=user.username,
         department_id=department_id,
         achievement_type=achievement_type,

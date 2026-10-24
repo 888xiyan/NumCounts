@@ -33,9 +33,18 @@ async def runtime_summary(
             CalculationRecord.status.in_(("pending", "waiting"))
         )
     )
+    oldest_running_at = await session.scalar(
+        select(func.min(CalculationRecord.updated_at)).where(
+            CalculationRecord.status == "running"
+        )
+    )
+    records_by_status = {name: count for name, count in status_rows}
     return RuntimeSummaryResponse(
-        records_by_status={name: count for name, count in status_rows},
+        records_by_status=records_by_status,
+        total_record_count=sum(records_by_status.values()),
+        failed_record_count=records_by_status.get("failed", 0),
         oldest_pending_at=oldest_pending_at,
+        oldest_running_at=oldest_running_at,
         record_link_count=(
             await session.scalar(select(func.count()).select_from(RecordLink)) or 0
         ),
